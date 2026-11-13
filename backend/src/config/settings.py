@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 300
     rate_limit_write_per_minute: int = 60
 
+    # 日报投递：配置后走真实 webhook；留空则模拟成功（演示环境无真实凭据）
+    feishu_webhook_url: str = ""
+    email_webhook_url: str = ""
+    wecom_webhook_url: str = ""
+    delivery_timeout_seconds: int = 5
+    # 逗号分隔的渠道名（feishu,email,wecom）：强制这些渠道投递失败，演示重试链路
+    delivery_fail_channels: str = ""
+
     @property
     def database_url(self) -> str:
         return (

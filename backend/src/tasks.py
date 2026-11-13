@@ -1,4 +1,4 @@
-"""Celery 任务：心跳、晨会波动巡检（写 Redis 缓存供前端顶栏）、日报异步分发占位。"""
+"""Celery 任务：心跳、晨会波动巡检（写 Redis 缓存供前端顶栏）、日报异步续投。"""
 from __future__ import annotations
 
 import json
@@ -59,5 +59,21 @@ def scan_swing() -> dict:
 
 @celery_app.task(name="swingattr.dispatch_report")
 def dispatch_report(report_id: int) -> dict:
-    """异步分发（演示版只回写占位状态，真实渠道需要 webhook 凭据）。"""
-    return {"report_id": report_id, "status": "queued"}
+    """异步续投：把指定日报未送达的渠道补发出去（已送达的跳过，全部送达才发布）。"""
+    from sqlalchemy import select
+
+    from src.config.database import session_scope
+    from src.models.report_issue import ReportIssue
+    from src.services import delivery_service
+
+    try:
+        with session_scope() as db:
+            report = db.scalar(select(ReportIssue).where(ReportIssue.id == report_id))
+            if report is None:
+                return {"report_id": report_id, "status": "not_found"}
+            summary = delivery_service.dispatch_pending(report)
+            report_status = report.status
+        return {"report_id": report_id, "report_status": report_status, **summary}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("dispatch report failed: %s", exc)
+        return {"report_id": report_id, "status": "error", "error": str(exc)}

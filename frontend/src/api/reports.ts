@@ -8,6 +8,8 @@ export const reportsApi = {
   get: (reportId: number) => http.get<Report>(`/reports/${reportId}`),
   distribute: (reportId: number, targets: { channel: string; target: string }[]) =>
     http.post<Report>(`/reports/${reportId}/distribute`, { targets }),
+  retryDelivery: (reportId: number, deliveryId: number) =>
+    http.post<Report>(`/reports/${reportId}/deliveries/${deliveryId}/retry`),
   exportMarkdown: async (reportId: number): Promise<string> => {
     const token = localStorage.getItem('swingattr.token');
     const response = await fetch(`/api/exports/report.md?report_id=${reportId}`, {

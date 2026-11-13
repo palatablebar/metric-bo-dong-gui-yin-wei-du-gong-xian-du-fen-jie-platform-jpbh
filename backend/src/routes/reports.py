@@ -49,3 +49,14 @@ def distribute(
     actor: dict = Depends(require_roles(*DISTRIBUTE_ROLES)),
 ) -> dict:
     return report_controller.distribute(db, report_id, payload.model_dump(), actor, request)
+
+
+@router.post("/{report_id}/deliveries/{delivery_id}/retry")
+def retry_delivery(
+    report_id: int,
+    delivery_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: dict = Depends(require_roles(*DISTRIBUTE_ROLES)),
+) -> dict:
+    return report_controller.retry_delivery(db, report_id, delivery_id, actor, request)

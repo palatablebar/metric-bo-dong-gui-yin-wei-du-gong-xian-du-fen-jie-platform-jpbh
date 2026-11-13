@@ -11,6 +11,7 @@ const FALLBACK: Record<string, string> = {
   NO_BASELINE: '找不到可用的基线日期（历史数据不足）',
   RUN_INCOMPLETE: '归因批次未完成，无法生成日报',
   REPORT_EXISTS: '该批次已生成过日报',
+  DELIVERY_ALREADY_SENT: '该渠道已送达，不会重复投递',
   INTERNAL: '服务内部错误',
 };
 

@@ -70,11 +70,27 @@ CREATE TABLE IF NOT EXISTS report_issues (
   id INT AUTO_INCREMENT PRIMARY KEY,
   report_date DATE NOT NULL, title VARCHAR(200) NOT NULL, metric_code VARCHAR(40) NOT NULL,
   run_id INT NOT NULL, status VARCHAR(16) NOT NULL DEFAULT 'draft',
-  conclusion TEXT, markdown LONGTEXT, deliveries JSON,
+  conclusion TEXT, markdown LONGTEXT,
   issued_by VARCHAR(120), seed_key VARCHAR(120) NULL,
   created_at DATETIME NOT NULL, published_at DATETIME NULL,
   UNIQUE KEY uq_report_seed_key (seed_key),
   KEY ix_report_date (report_date), KEY ix_report_run (run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 投递任务：一次分发按渠道一路一条；(report_id, channel, target) 唯一保证幂等，
+-- 重试只续 status != 'sent' 的任务，全部送达后日报才 published。
+CREATE TABLE IF NOT EXISTS report_deliveries (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  report_id INT NOT NULL,
+  channel VARCHAR(16) NOT NULL, target VARCHAR(120) NOT NULL DEFAULT '',
+  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  attempts INT NOT NULL DEFAULT 0, last_error VARCHAR(500) NULL,
+  actor VARCHAR(120), seed_key VARCHAR(120) NULL,
+  created_at DATETIME NOT NULL, last_attempt_at DATETIME NULL, delivered_at DATETIME NULL,
+  UNIQUE KEY uq_delivery_task (report_id, channel, target),
+  UNIQUE KEY uq_delivery_seed_key (seed_key),
+  KEY ix_delivery_report (report_id),
+  CONSTRAINT fk_delivery_report FOREIGN KEY (report_id) REFERENCES report_issues (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS audit_logs (

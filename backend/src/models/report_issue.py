@@ -1,12 +1,13 @@
-"""日报：正文 markdown + 结论 + 分发记录（deliveries JSON 里 2 条渠道记录）。"""
+"""日报：正文 markdown + 结论；分发记录是独立的投递任务（report_deliveries）。"""
 from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Date, DateTime, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models import Base
+from src.models.report_delivery import ReportDelivery
 from src.utils.timeutil import utcnow
 
 
@@ -21,7 +22,11 @@ class ReportIssue(Base):
     status: Mapped[str] = mapped_column(String(16), default="draft")
     conclusion: Mapped[str] = mapped_column(Text, default="")
     markdown: Mapped[str] = mapped_column(Text, default="")
-    deliveries: Mapped[list] = mapped_column(JSON, default=list)
+    deliveries: Mapped[list[ReportDelivery]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="ReportDelivery.id",
+        lazy="selectin",
+    )
     issued_by: Mapped[str] = mapped_column(String(120), default="")
     seed_key: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

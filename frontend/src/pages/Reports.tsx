@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import EmptyState from '../components/common/EmptyState';
-import LevelBadge from '../components/common/LevelBadge';
 import { reportsApi } from '../api/reports';
 import { can } from '../constants/roles';
-import { DELIVERY_LABELS } from '../constants/enums';
+import { DELIVERY_LABELS, DELIVERY_STATUS_CLASS } from '../constants/enums';
 import { useAsync } from '../hooks/useAsync';
 import { useAuth } from '../router/guards';
 import { uiStore } from '../stores/uiStore';
 import { errorMessage } from '../utils/errorMessage';
-import { fmtPct } from '../utils/format';
 import type { Report } from '../types/models';
 
 const CHANNELS = [
@@ -29,6 +27,10 @@ function download(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
+function fmtTime(value: string | null | undefined) {
+  return value ? value.replace('T', ' ').slice(0, 16) : '—';
+}
+
 export default function Reports() {
   const { user } = useAuth();
   const canDistribute = can(user?.role, 'report:distribute');
@@ -47,19 +49,41 @@ export default function Reports() {
     }
   }
 
-  async function distribute(report: Report, channels: string[]) {
+  async function distribute(report: Report) {
     setBusy(true);
     try {
-      const targets = CHANNELS.filter((item) => channels.includes(item.channel)).map((item) => ({
-        channel: item.channel,
-        target: item.target,
-      }));
+      const targets = CHANNELS.map((item) => ({ channel: item.channel, target: item.target }));
       const updated = await reportsApi.distribute(report.id, targets);
       setSelected(updated);
-      uiStore.toast(`已分发 ${targets.length} 个渠道，累计 ${updated.delivery_count} 条记录`);
+      const d = updated.dispatch;
+      if (d) {
+        const parts = [`新送达 ${d.sent} 路`];
+        if (d.skipped_sent) parts.push(`跳过已送达 ${d.skipped_sent} 路`);
+        if (d.failed) parts.push(`失败 ${d.failed} 路（可单路重试）`);
+        uiStore.toast(parts.join(' · '), d.failed > 0);
+      }
       query.reload();
     } catch (err) {
       uiStore.toast(errorMessage((err as { payload?: unknown }).payload, '分发失败'), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retry(report: Report, deliveryId: number) {
+    setBusy(true);
+    try {
+      const updated = await reportsApi.retryDelivery(report.id, deliveryId);
+      setSelected(updated);
+      const task = updated.deliveries.find((item) => item.id === deliveryId);
+      if (task?.status === 'sent') {
+        uiStore.toast(`${task.channel_label} 已补发送达，累计尝试 ${task.attempts} 次`);
+      } else {
+        uiStore.toast(`${task?.channel_label ?? '渠道'} 仍未送达：${task?.last_error ?? '未知原因'}`, true);
+      }
+      query.reload();
+    } catch (err) {
+      uiStore.toast(errorMessage((err as { payload?: unknown }).payload, '重试失败'), true);
     } finally {
       setBusy(false);
     }
@@ -108,11 +132,19 @@ export default function Reports() {
                     <span className="num" style={{ fontFamily: 'var(--font-display)' }}>
                       {report.report_date}
                     </span>
-                    <span className={`badge ${report.status === 'published' ? 'normal' : 'muted'}`}>
+                    <span
+                      className={`badge ${
+                        report.status === 'published' ? 'normal' : report.status === 'delivering' ? 'warning' : 'muted'
+                      }`}
+                    >
                       {report.status_label}
                     </span>
                     <span className="spacer" />
-                    <span className="tiny muted">{report.delivery_count} 条分发</span>
+                    <span className="tiny muted">
+                      {report.delivery_summary.total
+                        ? `送达 ${report.delivery_summary.sent}/${report.delivery_summary.total}`
+                        : '未分发'}
+                    </span>
                   </div>
                   <div className="tiny muted" style={{ marginTop: 3 }}>
                     {report.title}
@@ -127,7 +159,7 @@ export default function Reports() {
       <div className="stack">
         {!selected ? (
           <div className="panel">
-            <EmptyState title="选一份日报" hint="左侧点开可看正文、分发记录，并导出 markdown。" />
+            <EmptyState title="选一份日报" hint="左侧点开可看正文、投递任务，并导出 markdown。" />
           </div>
         ) : (
           <>
@@ -144,45 +176,71 @@ export default function Reports() {
                 </button>
                 <span className="spacer" />
                 {canDistribute ? (
-                  <>
-                    <button className="btn btn-sm" disabled={busy} onClick={() => distribute(selected, ['feishu', 'email'])}>
-                      分发到飞书 + 邮件（2 条）
-                    </button>
-                    <button className="btn btn-sm" disabled={busy} onClick={() => distribute(selected, ['wecom'])}>
-                      追加企微
-                    </button>
-                  </>
+                  <button className="btn btn-sm" disabled={busy} onClick={() => distribute(selected)}>
+                    一键分发（飞书 + 邮件 + 企微）
+                  </button>
                 ) : (
                   <span className="tiny muted">分发需要分析负责人权限</span>
                 )}
               </div>
+              {canDistribute ? (
+                <div className="tiny muted" style={{ marginBottom: 10 }}>
+                  已送达的渠道自动跳过、不重复发送；失败的渠道可在下方单路重试。全部送达后日报才发布。
+                </div>
+              ) : null}
               <div className="panel" style={{ marginTop: 0, padding: '10px 12px', boxShadow: 'none' }}>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>分发记录 {selected.delivery_count} 条</div>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>
+                  投递任务 {selected.delivery_summary.total} 条 · 送达 {selected.delivery_summary.sent} · 失败{' '}
+                  {selected.delivery_summary.failed} · 等待 {selected.delivery_summary.pending}
+                </div>
                 {selected.deliveries.length ? (
                   <table className="table">
                     <thead>
                       <tr>
                         <th>渠道</th>
                         <th>目标</th>
-                        <th>时间</th>
                         <th>状态</th>
+                        <th>尝试</th>
+                        <th>失败原因</th>
+                        <th>送达时间</th>
+                        {canDistribute ? <th>操作</th> : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {selected.deliveries.map((item, index) => (
-                        <tr key={`${item.channel}-${index}`}>
+                      {selected.deliveries.map((item) => (
+                        <tr key={item.id} data-testid={`delivery-${item.id}`}>
                           <td>{DELIVERY_LABELS[item.channel] || item.channel_label}</td>
                           <td className="tiny">{item.target}</td>
-                          <td className="tiny num">{item.delivered_at?.replace('T', ' ').slice(0, 16)}</td>
                           <td>
-                            <span className="badge normal">已发送</span>
+                            <span className={DELIVERY_STATUS_CLASS[item.status]}>{item.status_label}</span>
                           </td>
+                          <td className="tiny num">{item.attempts}</td>
+                          <td className="tiny" style={{ color: item.last_error ? 'var(--alert)' : undefined }}>
+                            {item.last_error || '—'}
+                          </td>
+                          <td className="tiny num">{fmtTime(item.delivered_at)}</td>
+                          {canDistribute ? (
+                            <td>
+                              {item.status !== 'sent' ? (
+                                <button
+                                  className="btn btn-sm"
+                                  disabled={busy}
+                                  onClick={() => retry(selected, item.id)}
+                                  data-testid={`retry-delivery-${item.id}`}
+                                >
+                                  重试
+                                </button>
+                              ) : (
+                                <span className="tiny muted">已送达</span>
+                              )}
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 ) : (
-                  <div className="tiny muted">还没有分发记录</div>
+                  <div className="tiny muted">还没有投递任务，点「一键分发」创建。</div>
                 )}
               </div>
             </div>
@@ -217,8 +275,8 @@ export default function Reports() {
               </div>
               <p style={{ margin: 0, fontSize: '0.86rem' }}>{selected.conclusion}</p>
               <div className="row tiny muted" style={{ marginTop: 8 }}>
-                <span>生成于 {selected.created_at?.replace('T', ' ').slice(0, 16)}</span>
-                {selected.published_at ? <span>发布于 {selected.published_at.replace('T', ' ').slice(0, 16)}</span> : null}
+                <span>生成于 {fmtTime(selected.created_at)}</span>
+                {selected.published_at ? <span>全部送达 · 发布于 {fmtTime(selected.published_at)}</span> : null}
               </div>
             </div>
           </>

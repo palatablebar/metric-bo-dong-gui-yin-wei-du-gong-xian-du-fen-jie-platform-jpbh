@@ -45,10 +45,11 @@ export const DIMENSION_LABELS: Record<string, string> = {
   segment: '客群',
 };
 
-export type ReportStatus = 'draft' | 'published';
+export type ReportStatus = 'draft' | 'delivering' | 'published';
 
 export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
   draft: '草稿',
+  delivering: '投递中',
   published: '已发布',
 };
 
@@ -56,4 +57,18 @@ export const DELIVERY_LABELS: Record<string, string> = {
   feishu: '飞书群',
   email: '邮件',
   wecom: '企微群',
+};
+
+export type DeliveryStatus = 'pending' | 'sent' | 'failed';
+
+export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
+  pending: '等待中',
+  sent: '已送达',
+  failed: '失败',
+};
+
+export const DELIVERY_STATUS_CLASS: Record<DeliveryStatus, string> = {
+  pending: 'badge muted',
+  sent: 'badge normal',
+  failed: 'badge critical',
 };

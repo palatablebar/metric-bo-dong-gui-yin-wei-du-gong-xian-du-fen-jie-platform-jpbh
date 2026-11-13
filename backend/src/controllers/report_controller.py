@@ -40,7 +40,33 @@ def distribute(db: Session, report_id: int, payload: dict, actor: dict, request:
         action="report.distribute",
         entity="report_issue",
         entity_id=report_id,
-        detail={"channels": [item["channel"] for item in report["deliveries"]], "count": report["delivery_count"]},
+        detail={
+            "channels": {item["channel"]: item["status"] for item in report["deliveries"]},
+            "dispatch": report["dispatch"],
+        },
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    return report
+
+
+def retry_delivery(db: Session, report_id: int, delivery_id: int, actor: dict, request: Request) -> dict:
+    report = report_service.retry_delivery(db, report_id, delivery_id, actor["email"])
+    task = next(item for item in report["deliveries"] if item["id"] == delivery_id)
+    audit_service.record(
+        db,
+        actor_email=actor["email"],
+        actor_role=actor["role"],
+        action="report.delivery_retry",
+        entity="report_delivery",
+        entity_id=delivery_id,
+        detail={
+            "report_id": report_id,
+            "channel": task["channel"],
+            "result": task["status"],
+            "attempts": task["attempts"],
+            "last_error": task["last_error"],
+        },
         ip=request.client.host if request.client else None,
     )
     db.commit()

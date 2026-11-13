@@ -248,12 +248,33 @@ export interface DrillPayload {
 }
 
 export interface Delivery {
+  id: number;
   channel: string;
   channel_label: string;
   target: string;
-  actor?: string;
-  delivered_at?: string;
-  status?: string;
+  status: 'pending' | 'sent' | 'failed';
+  status_label: string;
+  attempts: number;
+  last_error: string | null;
+  actor: string;
+  created_at: string | null;
+  last_attempt_at: string | null;
+  delivered_at: string | null;
+}
+
+export interface DeliverySummary {
+  total: number;
+  sent: number;
+  failed: number;
+  pending: number;
+}
+
+export interface DispatchResult {
+  attempted: number;
+  sent: number;
+  failed: number;
+  skipped_sent: number;
+  created: number;
 }
 
 export interface Report {
@@ -268,6 +289,8 @@ export interface Report {
   markdown: string;
   deliveries: Delivery[];
   delivery_count: number;
+  delivery_summary: DeliverySummary;
+  dispatch?: DispatchResult;
   issued_by: string;
   created_at: string;
   published_at: string | null;

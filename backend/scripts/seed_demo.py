@@ -7,6 +7,7 @@
   fact_daily(id)  —— 明细整批只有一次：以「该日期是否已有明细」判定，已存在就整日跳过
   attribution_runs.seed_key
   report_issues.seed_key
+  report_deliveries.seed_key
 
 重复执行不新增、不覆盖用户修改。SEED_SUMMARY 里 runs / reports 只数 seed 自己建的记录，
 所以跑过现场归因后重复 seed 计数不会漂移。
@@ -15,18 +16,21 @@
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 
 from src.config.database import session_scope
-from src.constants.enums import DeliveryChannel, ReportStatus
+from src.constants.enums import DeliveryChannel, DeliveryStatus
 from src.models.attribution_run import AttributionRun
 from src.models.audit import AuditLog
 from src.models.dim_tree import DimTree
 from src.models.fact_daily import FactDaily
 from src.models.metric_def import MetricDef
+from src.models.report_delivery import ReportDelivery
 from src.models.report_issue import ReportIssue
 from src.models.user import User
-from src.services import report_service, swing_service
+from src.services import delivery_service, report_service, swing_service
 from src.utils.security import hash_password
 from scripts import demo_config as cfg
 from scripts.fact_builder import build_facts
@@ -67,20 +71,18 @@ SEED_RUNS = [
 
 SEED_REPORT_DELIVERIES = [
     {
+        "seed_key": "seed:delivery:gmv:2026-11-09:feishu",
         "channel": DeliveryChannel.FEISHU.value,
-        "channel_label": "飞书群",
         "target": "经营分析晨会群",
         "actor": "admin@swingattr.io",
-        "delivered_at": "2026-11-10T08:40:00Z",
-        "status": "sent",
+        "delivered_at": datetime(2026, 11, 10, 8, 40, 0),
     },
     {
+        "seed_key": "seed:delivery:gmv:2026-11-09:email",
         "channel": DeliveryChannel.EMAIL.value,
-        "channel_label": "邮件",
         "target": "ops-lead@wotian.example",
         "actor": "admin@swingattr.io",
-        "delivered_at": "2026-11-10T08:41:00Z",
-        "status": "sent",
+        "delivered_at": datetime(2026, 11, 10, 8, 41, 0),
     },
 ]
 
@@ -203,18 +205,35 @@ def ensure_attribution_runs(db) -> dict[int | str, int]:
 
 def ensure_report(db, run_ids: dict[str, int]) -> None:
     seed_key = "seed:report:gmv:2026-11-09"
-    if db.scalar(select(ReportIssue).where(ReportIssue.seed_key == seed_key)):
-        return
-    run_id = run_ids.get("seed:run:gmv:2026-11-09")
-    if run_id is None:
-        return
-    report = report_service.create_report(
-        db, run_id, SEED_RUNS[0]["conclusion"], "admin@swingattr.io"
-    )
-    row = db.scalar(select(ReportIssue).where(ReportIssue.id == report["id"]))
-    row.seed_key = seed_key
-    row.status = ReportStatus.PUBLISHED.value
-    row.deliveries = SEED_REPORT_DELIVERIES
+    report = db.scalar(select(ReportIssue).where(ReportIssue.seed_key == seed_key))
+    if report is None:
+        run_id = run_ids.get("seed:run:gmv:2026-11-09")
+        if run_id is None:
+            return
+        created = report_service.create_report(
+            db, run_id, SEED_RUNS[0]["conclusion"], "admin@swingattr.io"
+        )
+        report = db.scalar(select(ReportIssue).where(ReportIssue.id == created["id"]))
+        report.seed_key = seed_key
+    # 投递任务按 seed_key 幂等补齐：两路已送达 → 日报发布
+    for spec in SEED_REPORT_DELIVERIES:
+        if db.scalar(select(ReportDelivery).where(ReportDelivery.seed_key == spec["seed_key"])):
+            continue
+        report.deliveries.append(
+            ReportDelivery(
+                channel=spec["channel"],
+                target=spec["target"],
+                status=DeliveryStatus.SENT.value,
+                attempts=1,
+                actor=spec["actor"],
+                seed_key=spec["seed_key"],
+                last_attempt_at=spec["delivered_at"],
+                delivered_at=spec["delivered_at"],
+            )
+        )
+    db.flush()
+    delivery_service.refresh_report_status(report)
+    report.published_at = datetime(2026, 11, 10, 8, 41, 0)
     db.flush()
 
 

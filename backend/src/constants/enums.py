@@ -87,11 +87,13 @@ RUN_STATUS_LABELS: dict[str, str] = {
 
 class ReportStatus(StrEnum):
     DRAFT = "draft"
+    DELIVERING = "delivering"    # 已发起分发，但仍有渠道未送达（不发布）
     PUBLISHED = "published"
 
 
 REPORT_STATUS_LABELS: dict[str, str] = {
     ReportStatus.DRAFT.value: "草稿",
+    ReportStatus.DELIVERING.value: "投递中",
     ReportStatus.PUBLISHED.value: "已发布",
 }
 
@@ -106,6 +108,21 @@ DELIVERY_LABELS: dict[str, str] = {
     DeliveryChannel.FEISHU.value: "飞书群",
     DeliveryChannel.EMAIL.value: "邮件",
     DeliveryChannel.WECOM.value: "企微群",
+}
+
+
+class DeliveryStatus(StrEnum):
+    """单路投递任务状态：等待 → 已送达 / 失败（失败可单独重试）。"""
+
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+DELIVERY_STATUS_LABELS: dict[str, str] = {
+    DeliveryStatus.PENDING.value: "等待中",
+    DeliveryStatus.SENT.value: "已送达",
+    DeliveryStatus.FAILED.value: "失败",
 }
 
 DIMENSION_LABELS: dict[str, str] = {

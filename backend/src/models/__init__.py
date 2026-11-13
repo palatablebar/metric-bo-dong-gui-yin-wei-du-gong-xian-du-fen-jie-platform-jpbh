@@ -13,9 +13,10 @@ from src.models.fact_daily import FactDaily  # noqa: E402
 from src.models.attribution_run import AttributionRun  # noqa: E402
 from src.models.swing_factor import SwingFactor  # noqa: E402
 from src.models.report_issue import ReportIssue  # noqa: E402
+from src.models.report_delivery import ReportDelivery  # noqa: E402
 from src.models.audit import AuditLog  # noqa: E402
 
 __all__ = [
     "Base", "User", "MetricDef", "DimTree", "FactDaily",
-    "AttributionRun", "SwingFactor", "ReportIssue", "AuditLog",
+    "AttributionRun", "SwingFactor", "ReportIssue", "ReportDelivery", "AuditLog",
 ]

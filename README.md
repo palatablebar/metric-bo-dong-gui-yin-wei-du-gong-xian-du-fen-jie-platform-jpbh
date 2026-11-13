@@ -38,7 +38,7 @@
 | 08:09 | 周到 | 跑归因 | 36 个三元组 + 33 个二元组扫描；头号因子 **华东 × 水产 × 社区团购 −53,040 元**（−5.2pp，占总降幅 62.7%） |
 | 08:11 | 周到 | 量价拆解 | 订单量 8,000 → 7,240（−9.50%），客单价 127.50 → 129.19（+1.33%）→ **降的是量不是价** |
 | 08:13 | 周到 | 生成日报 | 自动写 markdown（因子表 + 量价表 + 结论 + 口径） |
-| 08:15 | 林清河（admin） | 分发 | 飞书群 + 邮件，**2 条分发记录** |
+| 08:15 | 林清河（admin） | 分发 | 飞书群 + 邮件两路投递任务均送达 → 日报发布；某路超时只补该路，已送达不重发 |
 | 08:20 | 苏未（exec） | 看日报 | 只读，无分发按钮，服务端也拒 |
 
 ## 主要功能（5 个模块串成链路）
@@ -47,7 +47,7 @@
 2. **基线设置**（`/baseline`）：4 个候选基线（环比 / 周环比 / 近 4 周中位数 / 节假日位移）全部列出并给不可用原因；MAD 稳健离散与 z 值；**选中理由逐条可读**。
 3. **归因分析**（`/attribution`）：瀑布图、Contribution Top-N 表、量价拆解、单维完整划分、守恒与残差校验、一键生成日报。
 4. **维度下钻**（`/drilldown`）：city → category → channel → store → segment 逐层收窄，面包屑可回退。
-5. **日报与分发**（`/reports`）：markdown 正文、分发记录、导出 `.md`。
+5. **日报与分发**（`/reports`）：markdown 正文、按渠道可追踪的投递任务（等待 / 已送达 / 失败 + 失败原因 + 尝试次数）、失败单路重试、全部送达才发布、导出 `.md`。
 
 ## 两个真算算法
 
@@ -123,7 +123,7 @@ cd frontend && npm install && npm run dev     # 5173，/api 代理到 19248
 | 前端 | React 18 + TypeScript + Vite 5 + React Router 6，图表全部 SVG 自绘（无图表库） |
 | 后端 | Python 3.11 + FastAPI 0.115 + SQLAlchemy 2.0 + Pydantic v2 |
 | 任务 | Celery 5.4（worker 容器；beat 心跳 + 每 15 分钟 GMV 波动巡检） |
-| 数据库 | MySQL 8.0（utf8mb4；JSON 列存量价拆解与分发记录） |
+| 数据库 | MySQL 8.0（utf8mb4；JSON 列存量价拆解；分发是独立的 `report_deliveries` 投递任务表） |
 | 缓存 | Redis 7（限流、worker 心跳、最近波动摘要） |
 | 视觉 | 气象观测站风 · Barlow Condensed + Source Serif 4 · oklch · 等压线 / 风玫瑰刻度 / 观测卡 |
 
@@ -150,6 +150,22 @@ docker-compose.yml  .env.example
 | `REDIS_URL` | Celery broker / 限流 | `redis://redis:6379/0` |
 | `SEED_DEMO` | 启动是否自动 seed | `true` |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_WRITE_PER_MINUTE` | 限流额度 | `300` / `60` |
+| `FEISHU_WEBHOOK_URL` / `EMAIL_WEBHOOK_URL` / `WECOM_WEBHOOK_URL` | 各渠道真实投递地址；留空则模拟成功 | 空 |
+| `DELIVERY_TIMEOUT_SECONDS` | 投递 HTTP 超时 | `5` |
+| `DELIVERY_FAIL_CHANNELS` | 逗号分隔渠道名，强制投递失败（演示「失败 → 单路重试」） | 空 |
+
+## 分发与投递任务
+
+分发不是「整批记一笔」，而是每渠道一条 `report_deliveries` 任务（`(report_id, channel, target)` 唯一）：
+
+```
+分发 POST /reports/{id}/distribute        → 缺的渠道补建任务（已有任务不重复建），续投所有未送达任务
+单路重试 POST /reports/{id}/deliveries/{delivery_id}/retry → 只补这一路；已送达返回 409
+任务状态 pending / sent / failed          → 每次尝试 attempts+1，失败原因写 last_error
+日报发布                                  → 全部任务 sent 才 published；否则保持「投递中」
+```
+
+网络超时后再次点「一键分发」：已送达的渠道跳过不重发，只续投失败/等待的渠道；同一任务重复分发不新增记录。
 
 ## 共享枚举出现位置
 
@@ -160,7 +176,7 @@ docker-compose.yml  .env.example
 | 基线类型 `BaselineKind` | `backend/src/constants/enums.py` | `frontend/src/constants/enums.ts` |
 | 异常等级 `AnomalyLevel` | `backend/src/constants/enums.py` | `frontend/src/constants/enums.ts` |
 | 因子类型 `FactorKind` | `backend/src/constants/enums.py` | `frontend/src/constants/enums.ts` |
-| 日报状态 `ReportStatus` / 分发渠道 `DeliveryChannel` | `backend/src/constants/enums.py` | `frontend/src/constants/enums.ts` |
+| 日报状态 `ReportStatus` / 分发渠道 `DeliveryChannel` / 投递状态 `DeliveryStatus` | `backend/src/constants/enums.py` | `frontend/src/constants/enums.ts` |
 
 ## 数据口径
 

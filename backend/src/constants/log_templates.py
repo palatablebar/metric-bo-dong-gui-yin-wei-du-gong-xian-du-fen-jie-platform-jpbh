@@ -8,6 +8,7 @@ ACTIONS: dict[str, str] = {
     "attribution.run": "运行归因",
     "report.create": "生成日报",
     "report.distribute": "分发日报",
+    "report.delivery_retry": "重试单路投递",
     "report.update": "修改日报结论",
     "export.report": "导出日报",
 }
