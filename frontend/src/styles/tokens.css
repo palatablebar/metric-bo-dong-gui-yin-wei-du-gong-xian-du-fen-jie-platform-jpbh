@@ -1,0 +1,31 @@
+/* swingattr 设计令牌：气象观测站。
+   冷灰蓝纸面 + 等压线 + 风玫瑰刻度 + 观测卡。全部 oklch，禁纯黑纯白。 */
+:root {
+  --paper: oklch(0.962 0.008 240);
+  --paper-2: oklch(0.935 0.011 240);
+  --paper-3: oklch(0.902 0.014 242);
+  --card: oklch(0.985 0.005 240);
+
+  --ink: oklch(0.275 0.028 252);
+  --ink-soft: oklch(0.452 0.024 250);
+  --ink-faint: oklch(0.648 0.018 248);
+  --rule: oklch(0.808 0.014 242);
+  --rule-strong: oklch(0.712 0.020 242);
+
+  --cold: oklch(0.520 0.088 245);
+  --cold-deep: oklch(0.395 0.072 250);
+  --cold-soft: oklch(0.720 0.052 240);
+  --warm: oklch(0.735 0.132 78);
+  --alert: oklch(0.545 0.168 26);
+  --good: oklch(0.505 0.088 168);
+  --muted: oklch(0.612 0.016 248);
+
+  --font-display: 'Barlow Condensed', 'Noto Sans SC', 'PingFang SC', sans-serif;
+  --font-body: 'Source Serif 4', 'Noto Serif SC', 'Songti SC', Georgia, serif;
+
+  --rail-w: 96px;
+  --pad: clamp(16px, 2.1vw, 32px);
+  --radius: 3px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow: 0 1px 0 oklch(0.87 0.012 242), 0 18px 34px -28px oklch(0.32 0.04 250 / 0.6);
+}
